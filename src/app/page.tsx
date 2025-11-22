@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useCallback } from "react";
 
 import { PromptBar } from "@/components/chat/PromptBar";
 import { Sidebar } from "@/components/layout/Sidebar";
@@ -58,13 +58,43 @@ export default function Home() {
     palettes: palettesData,
   });
 
-type SavedPaletteRow = {
-  id: string;
-  name: string;
-  prompt?: string | null;
-  tokens: PaletteCardType;
-  created_at?: string | null;
-};
+  type SavedPaletteRow = {
+    id: string;
+    name: string;
+    prompt?: string | null;
+    tokens: PaletteCardType;
+    created_at?: string | null;
+  };
+
+  const mapSavedPaletteRows = (entries: SavedPaletteRow[] = []) =>
+    entries
+      .map((entry) => {
+        const tokens = entry.tokens;
+        if (!tokens) return null;
+        return {
+          ...tokens,
+          id: entry.id ?? tokens.id,
+          name: entry.name ?? tokens.name,
+          createdAt: entry.created_at ?? tokens.createdAt ?? new Date().toISOString(),
+        };
+      })
+      .filter((palette): palette is PaletteCardType => Boolean(palette));
+
+  const refreshSavedPalettes = useCallback(async () => {
+    if (!session) return;
+    try {
+      const res = await fetch("/api/palettes");
+      if (!res.ok) {
+        console.error("[HueMind] Failed to refresh saved palettes", res.statusText);
+        return;
+      }
+      const text = await res.text();
+      const data: { palettes?: SavedPaletteRow[] } = text ? JSON.parse(text) : { palettes: [] };
+      setSavedPalettes(mapSavedPaletteRows(data?.palettes ?? []));
+    } catch (error) {
+      console.error("[HueMind] Failed to refresh saved palettes", error);
+    }
+  }, [session]);
 
   const handlePromptSubmit = async (prompt: string) => {
     const trimmedPrompt = prompt.trim();
@@ -222,19 +252,7 @@ type SavedPaletteRow = {
         const text = await res.text();
         const data: { palettes?: SavedPaletteRow[] } = text ? JSON.parse(text) : { palettes: [] };
         if (cancelled) return;
-        const normalized: PaletteCardType[] = (data?.palettes ?? [])
-          .map((entry) => {
-            const tokens = entry.tokens;
-            if (!tokens) return null;
-            return {
-              ...tokens,
-              id: entry.id ?? tokens.id,
-              name: entry.name ?? tokens.name,
-              createdAt: entry.created_at ?? tokens.createdAt ?? new Date().toISOString(),
-            };
-          })
-          .filter((palette): palette is PaletteCardType => Boolean(palette));
-        setSavedPalettes(normalized);
+        setSavedPalettes(mapSavedPaletteRows(data?.palettes ?? []));
       } catch (error) {
         console.error("[HueMind] Failed to load saved palettes", error);
         if (!cancelled) setSavedPalettes([]);
@@ -260,24 +278,32 @@ type SavedPaletteRow = {
 
   const persistPalette = async (palette: PaletteCardType, prompt: string) => {
     if (!session) return;
-    await fetch("/api/palettes", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: palette.name,
-        prompt,
-        tokens: palette,
-      }),
-    }).catch(() => {});
-    setSavedPalettes((prev) => [palette, ...prev]);
-    fetch("/api/usage")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data && typeof data.used === "number") {
-          setUsage(data);
-        }
-      })
-      .catch(() => {});
+    try {
+      const response = await fetch("/api/palettes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: palette.name,
+          prompt,
+          tokens: palette,
+        }),
+      });
+      if (!response.ok) {
+        console.error("[HueMind] Failed to save palette", await response.text());
+        return;
+      }
+      await refreshSavedPalettes();
+      fetch("/api/usage")
+        .then((res) => res.json())
+        .then((data) => {
+          if (data && typeof data.used === "number") {
+            setUsage(data);
+          }
+        })
+        .catch(() => {});
+    } catch (error) {
+      console.error("[HueMind] Unable to save palette", error);
+    }
   };
 
   const createExtractedPalette = (
@@ -353,6 +379,25 @@ type SavedPaletteRow = {
     toast.success("Random palette saved.");
   };
 
+  const handleDeletePalette = async (paletteId: string) => {
+    if (!session) {
+      toast.error("Sign in to manage saved palettes.");
+      return;
+    }
+    try {
+      const response = await fetch(`/api/palettes/${paletteId}`, { method: "DELETE" });
+      if (!response.ok) {
+        throw new Error("Unable to remove palette");
+      }
+      setSavedPalettes((prev) => prev.filter((palette) => palette.id !== paletteId));
+      toast.success("Palette removed.");
+      await refreshSavedPalettes();
+    } catch (error) {
+      console.error("[HueMind] Failed to delete palette", error);
+      toast.error("Failed to remove palette.");
+    }
+  };
+
   const incrementUsageCount = async () => {
     if (!session) return;
     try {
@@ -389,7 +434,14 @@ type SavedPaletteRow = {
       data-preview-theme={previewTheme}
       className="relative flex min-h-screen bg-background text-foreground transition-colors duration-300"
     >
-      <Sidebar activeMode={activeMode} onModeChange={setActiveMode} />
+      <Sidebar
+        activeMode={activeMode}
+        onModeChange={setActiveMode}
+        theme={previewTheme}
+        onToggleTheme={() =>
+          setPreviewTheme((prev) => (prev === "dark" ? "light" : "dark"))
+        }
+      />
       <div className="relative flex flex-1 flex-col overflow-hidden">
         <div className="flex-1 overflow-y-auto">
           <div className="px-6 pb-40 pt-10 sm:px-8 xl:px-12">
@@ -619,6 +671,7 @@ type SavedPaletteRow = {
                 palettes={savedPalettes}
                 isLoading={isSavedLoading}
                 onPreview={(palette) => handlePreviewOpen(palette)}
+                onRemove={handleDeletePalette}
               />
             )}
           </div>
@@ -628,10 +681,6 @@ type SavedPaletteRow = {
         <PromptBar
           onSubmit={handlePromptSubmit}
           isGenerating={isGenerating}
-          previewTheme={previewTheme}
-          onTogglePreviewTheme={() =>
-            setPreviewTheme((prev) => (prev === "dark" ? "light" : "dark"))
-          }
           onSave={session ? handleSaveActivePalette : undefined}
           canSave={Boolean(session && activePalette)}
         />

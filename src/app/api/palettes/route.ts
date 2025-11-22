@@ -1,22 +1,20 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-
 import { createRouteSupabaseClient } from "@/lib/supabase/route";
 
 export async function GET() {
-  const supabase = createRouteSupabaseClient(cookies());
+  const supabase = await createRouteSupabaseClient();
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  if (!session?.user) {
+  if (!user) {
     return NextResponse.json({ palettes: [] });
   }
 
   const { data, error } = await supabase
     .from("palettes")
     .select("id, name, prompt, tokens, tags, is_public, created_at, updated_at")
-    .eq("user_id", session.user.id)
+    .eq("user_id", user.id)
     .order("updated_at", { ascending: false });
 
   if (error) {
@@ -28,12 +26,12 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const supabase = createRouteSupabaseClient(cookies());
+  const supabase = await createRouteSupabaseClient();
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  if (!session?.user) {
+  if (!user) {
     return NextResponse.json({ error: "Authentication required" }, { status: 401 });
   }
 
@@ -48,7 +46,7 @@ export async function POST(request: Request) {
   }
 
   const { error } = await supabase.from("palettes").insert({
-    user_id: session.user.id,
+    user_id: user.id,
     name,
     prompt,
     tokens,

@@ -5,7 +5,8 @@ import { Lock, Unlock, RefreshCw, Sun, Moon, Sparkles, Loader2 } from "lucide-re
 
 import type { PaletteCard } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { createRandomHex } from "@/lib/random";
+import { createRandomHex, type RandomBiasMode } from "@/lib/random";
+import { PaletteCanvas } from "@/components/palette/PaletteCanvas";
 
 export type RandomSwatch = {
   hex: string;
@@ -13,17 +14,23 @@ export type RandomSwatch = {
   locked: boolean;
 };
 
-type Bias = "none" | "warmer" | "cooler" | "muted" | "contrast";
-
 type Props = {
   onSave: (palette: PaletteCard, source?: string) => Promise<void>;
   usage?: { used: number; limit: number; plan: string } | null;
   incrementUsage?: () => Promise<void>;
 };
 
+const biasOptions: { value: RandomBiasMode; label: string }[] = [
+  { value: "none", label: "No bias" },
+  { value: "warmer", label: "Warmer" },
+  { value: "cooler", label: "Cooler" },
+  { value: "muted", label: "More muted" },
+  { value: "contrast", label: "More contrast" },
+];
+
 export const RandomPalettePanel = ({ onSave, usage, incrementUsage }: Props) => {
   const [swatches, setSwatches] = useState<RandomSwatch[]>([]);
-  const [bias, setBias] = useState<Bias>("none");
+  const [bias, setBias] = useState<RandomBiasMode>("none");
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [name, setName] = useState("Random Palette");
   const [isGenerating, setIsGenerating] = useState(false);
@@ -43,7 +50,7 @@ export const RandomPalettePanel = ({ onSave, usage, incrementUsage }: Props) => 
           continue;
         }
         const existingHexes = newSwatches.slice(0, index).map((swatch) => swatch.hex);
-        const { hex } = createRandomHex(existingHexes, mapBias(bias), index, 5);
+        const { hex } = createRandomHex(existingHexes, bias, index, 5);
         newSwatches[index] = {
           hex,
           label: `Shade ${index + 1}`,
@@ -85,7 +92,7 @@ export const RandomPalettePanel = ({ onSave, usage, incrementUsage }: Props) => 
 
   const replaceSwatch = (index: number) => {
     const existingHexes = swatches.filter((_, idx) => idx !== index).map((swatch) => swatch.hex);
-    const { hex } = createRandomHex(existingHexes, mapBias(bias), index, 5);
+    const { hex } = createRandomHex(existingHexes, bias, index, 5);
     setSwatches((prev) => prev.map((swatch, i) => (i === index ? { ...swatch, hex, locked: false } : swatch)));
   };
 
@@ -103,6 +110,11 @@ export const RandomPalettePanel = ({ onSave, usage, incrementUsage }: Props) => 
       // optional toast hook
     });
   };
+
+  const paletteColors = useMemo(
+    () => swatches.map((swatch) => ({ hex: swatch.hex, label: swatch.label })),
+    [swatches]
+  );
 
   const builtPalette: PaletteCard | null = useMemo(() => {
     if (!swatches.length) return null;
@@ -147,63 +159,88 @@ export const RandomPalettePanel = ({ onSave, usage, incrementUsage }: Props) => 
           </button>
         </div>
       </div>
-      <div className="flex flex-wrap gap-3 text-xs">
-        {(['none', 'warmer', 'cooler', 'muted', 'contrast'] as Bias[]).map((chip) => (
-          <button
-            key={chip}
-            type="button"
-            onClick={() => setBias(chip)}
-            className={cn(
-              "rounded-full px-3 py-1",
-              bias === chip ? "bg-accent/15 text-accent" : "bg-surface/80 text-foreground/70"
-            )}
-          >
-            {chip === 'none' ? 'Reset' : chip.charAt(0).toUpperCase() + chip.slice(1)}
-          </button>
-        ))}
+      <div className="flex flex-wrap items-center gap-3">
+      <label htmlFor="bias-select" className="text-sm text-foreground/70">
+        Tuning
+      </label>
+      <div className="w-56">
+        <select
+          id="bias-select"
+          className="w-full rounded-xl border border-border/60 bg-surface/80 px-3 py-2 text-sm text-foreground"
+          value={bias}
+          onChange={(event) => setBias(event.target.value as RandomBiasMode)}
+        >
+          {biasOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
       </div>
-      <div className="space-y-4">
-        {swatches.map((swatch, index) => (
-          <div
-            key={swatch.hex + index}
-            draggable
-            onDragStart={(event) => {
-              event.dataTransfer.setData("text/plain", String(index));
-            }}
-            onDragOver={(event) => event.preventDefault()}
-            onDrop={(event) => {
-              const from = Number(event.dataTransfer.getData("text/plain"));
-              reorderSwatches(from, index);
-            }}
-            className="flex items-center gap-4 rounded-2xl border border-border/60 bg-surface/90 p-4"
-          >
-            <div
-              className="h-16 w-full rounded-xl"
-              style={{ backgroundColor: swatch.hex }}
-              onClick={() => copyHex(swatch.hex)}
-            />
-            <div className="min-w-[120px]">
-              <p className="text-lg font-semibold text-foreground">{swatch.hex}</p>
-              <p className="text-xs uppercase tracking-[0.3em] text-foreground/50">{swatch.label}</p>
+    </div>
+      <div className="rounded-[32px] border border-border/70 bg-surface/95 p-5 shadow-[0_25px_60px_rgba(10,15,35,0.2)]">
+        {swatches.length ? (
+          <>
+            <div className="rounded-[32px] border border-border/40 bg-background/40 p-3">
+              <PaletteCanvas
+                colors={paletteColors}
+                paletteId="random-preview"
+                isLoading={isGenerating}
+                className="min-h-[340px]"
+              />
             </div>
-            <div className="ml-auto flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => toggleLock(index)}
-                className="rounded-full border border-border/60 p-2 text-foreground/70"
-              >
-                {swatch.locked ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
-              </button>
-              <button
-                type="button"
-                onClick={() => replaceSwatch(index)}
-                className="rounded-full border border-border/60 p-2 text-foreground/70"
-              >
-                <RefreshCw className="h-4 w-4" />
-              </button>
+            <div className="mt-6 space-y-3">
+              {swatches.map((swatch, index) => (
+                <div
+                  key={`${swatch.hex}-${index}`}
+                  draggable
+                  onDragStart={(event) => event.dataTransfer.setData("text/plain", String(index))}
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={(event) => {
+                    const from = Number(event.dataTransfer.getData("text/plain"));
+                    reorderSwatches(from, index);
+                  }}
+                  className="flex items-center gap-4 rounded-2xl border border-border/60 bg-background/50 px-4 py-3"
+                >
+                  <button
+                    type="button"
+                    onClick={() => copyHex(swatch.hex)}
+                    className="flex flex-1 items-center gap-3 text-left"
+                  >
+                    <span
+                      className="h-12 w-12 rounded-xl border border-border/40 shadow-inner"
+                      style={{ backgroundColor: swatch.hex }}
+                    />
+                    <span className="text-lg font-semibold text-foreground">{swatch.hex}</span>
+                    <span className="text-[11px] uppercase tracking-[0.3em] text-foreground/50">
+                      {swatch.label}
+                    </span>
+                  </button>
+                  <div className="ml-auto flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => toggleLock(index)}
+                      className="rounded-full border border-border/60 p-2 text-foreground/70"
+                    >
+                      {swatch.locked ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => replaceSwatch(index)}
+                      className="rounded-full border border-border/60 p-2 text-foreground/70"
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
+          </>
+        ) : (
+          <div className="flex min-h-[320px] items-center justify-center text-sm text-foreground/60">
+            Generate a palette to preview it here.
           </div>
-        ))}
+        )}
       </div>
       <div className="rounded-2xl border border-border/60 bg-surface/80 p-4 text-sm text-foreground">
         <p className="font-semibold">Preview</p>
@@ -234,21 +271,6 @@ export const RandomPalettePanel = ({ onSave, usage, incrementUsage }: Props) => 
       </div>
     </div>
   );
-};
-
-const mapBias = (bias: Bias) => {
-  switch (bias) {
-    case "warmer":
-      return { warmth: 1 };
-    case "cooler":
-      return { warmth: -1 };
-    case "muted":
-      return { muted: true };
-    case "contrast":
-      return { contrast: 1 };
-    default:
-      return {};
-  }
 };
 
 const buildNeutralRamp = (startHex: string): { hex: string; label: string; role: "neutral" }[] => {

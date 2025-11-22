@@ -1,4 +1,4 @@
-import type { ReadonlyRequestCookies } from "next/headers";
+import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 
 import type { Database } from "./types";
@@ -10,8 +10,9 @@ if (!supabaseUrl || !supabaseKey) {
   throw new Error("Supabase environment variables are not configured.");
 }
 
-export const createRouteSupabaseClient = (cookieStore: ReadonlyRequestCookies) =>
-  createServerClient<Database>(supabaseUrl, supabaseKey, {
+export const createRouteSupabaseClient = async () => {
+  const cookieStore = await cookies();
+  return createServerClient<Database>(supabaseUrl, supabaseKey, {
     cookies: {
       get(name: string) {
         return cookieStore.get(name)?.value;
@@ -24,3 +25,4 @@ export const createRouteSupabaseClient = (cookieStore: ReadonlyRequestCookies) =
       },
     },
   });
+};

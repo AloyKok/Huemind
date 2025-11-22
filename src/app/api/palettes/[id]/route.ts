@@ -1,15 +1,16 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-
 import { createRouteSupabaseClient } from "@/lib/supabase/route";
 
-export async function PATCH(request: Request, { params }: { params: { id: string } }) {
-  const supabase = createRouteSupabaseClient(cookies());
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
+type RouteParams = Promise<{ id: string }>;
 
-  if (!session?.user) {
+export async function PATCH(request: Request, { params }: { params: RouteParams }) {
+  const { id } = await params;
+  const supabase = await createRouteSupabaseClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
     return NextResponse.json({ error: "Authentication required" }, { status: 401 });
   }
 
@@ -22,8 +23,8 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   const { error } = await supabase
     .from("palettes")
     .update(updates)
-    .eq("id", params.id)
-    .eq("user_id", session.user.id);
+    .eq("id", id)
+    .eq("user_id", user.id);
 
   if (error) {
     console.error("[HueMind] Failed to update palette", error);
@@ -33,21 +34,22 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   return NextResponse.json({ success: true });
 }
 
-export async function DELETE(_: Request, { params }: { params: { id: string } }) {
-  const supabase = createRouteSupabaseClient(cookies());
+export async function DELETE(_: Request, { params }: { params: RouteParams }) {
+  const { id } = await params;
+  const supabase = await createRouteSupabaseClient();
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  if (!session?.user) {
+  if (!user) {
     return NextResponse.json({ error: "Authentication required" }, { status: 401 });
   }
 
   const { error } = await supabase
     .from("palettes")
     .delete()
-    .eq("id", params.id)
-    .eq("user_id", session.user.id);
+    .eq("id", id)
+    .eq("user_id", user.id);
 
   if (error) {
     console.error("[HueMind] Failed to delete palette", error);

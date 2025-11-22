@@ -1,6 +1,4 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-
 import { createRouteSupabaseClient } from "@/lib/supabase/route";
 
 const getPeriod = () => {
@@ -22,19 +20,19 @@ const planLimits: Record<string, number> = {
 };
 
 export async function GET() {
-  const supabase = createRouteSupabaseClient(cookies());
+  const supabase = await createRouteSupabaseClient();
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  if (!session?.user) {
+  if (!user) {
     return NextResponse.json({ used: 0, limit: 0, plan: "ANON" });
   }
 
   const { data: profile } = await supabase
     .from("profiles")
     .select("plan")
-    .eq("id", session.user.id)
+    .eq("id", user.id)
     .single();
 
   const plan = profile?.plan ?? "FREE";
@@ -47,7 +45,7 @@ export async function GET() {
   const { data } = await supabase
     .from("usage")
     .select("palette_generations")
-    .eq("user_id", session.user.id)
+    .eq("user_id", user.id)
     .eq("period_start", start)
     .eq("period_end", end)
     .single();

@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import OpenAI from "openai";
 
 import { contrastRatio, getAccessibilityGrade } from "@/lib/color-utils";
@@ -256,15 +255,15 @@ export async function POST(request: Request) {
     );
   }
 
-  const supabase = SUPABASE_AVAILABLE ? createRouteSupabaseClient(cookies()) : null;
+  const supabase = SUPABASE_AVAILABLE ? await createRouteSupabaseClient() : null;
   let sessionUserId: string | null = null;
   let usageContext: Awaited<ReturnType<typeof fetchUsageContext>> | null = null;
 
   if (supabase) {
     const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    sessionUserId = session?.user?.id ?? null;
+      data: { user },
+    } = await supabase.auth.getUser();
+    sessionUserId = user?.id ?? null;
     if (sessionUserId) {
       usageContext = await fetchUsageContext(supabase, sessionUserId);
       if (

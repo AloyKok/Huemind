@@ -1,22 +1,20 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-
 import { createRouteSupabaseClient } from "@/lib/supabase/route";
 
 export async function GET() {
-  const supabase = createRouteSupabaseClient(cookies());
+  const supabase = await createRouteSupabaseClient();
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  if (!session?.user) {
+  if (!user) {
     return NextResponse.json({ user: null });
   }
 
   const { data, error } = await supabase
     .from("profiles")
     .select("name, image, plan, stripe_customer_id, created_at")
-    .eq("id", session.user.id)
+    .eq("id", user.id)
     .single();
 
   if (error) {
@@ -24,16 +22,16 @@ export async function GET() {
     return NextResponse.json({ error: "Unable to fetch profile" }, { status: 500 });
   }
 
-  return NextResponse.json({ user: data, email: session.user.email });
+  return NextResponse.json({ user: data, email: user.email });
 }
 
 export async function PATCH(request: Request) {
-  const supabase = createRouteSupabaseClient(cookies());
+  const supabase = await createRouteSupabaseClient();
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  if (!session?.user) {
+  if (!user) {
     return NextResponse.json({ error: "Authentication required" }, { status: 401 });
   }
 
@@ -45,7 +43,7 @@ export async function PATCH(request: Request) {
   const { error } = await supabase
     .from("profiles")
     .upsert({
-      id: session.user.id,
+      id: user.id,
       ...updates,
     });
 

@@ -3,7 +3,7 @@
 import type { ComponentType, SVGProps } from "react";
 
 import { cn } from "@/lib/utils";
-import { Bookmark, Dice1, ImageUp, Sparkles } from "lucide-react";
+import { Bookmark, Dice1, ImageUp, Sparkles, MoonStar, Sun } from "lucide-react";
 import type { PalettePreviewMode } from "@/lib/types";
 import { SidebarAuthPanel } from "./SidebarAuthPanel";
 
@@ -21,9 +21,11 @@ const primaryNav: Array<{
 type SidebarProps = {
   activeMode: PalettePreviewMode;
   onModeChange: (mode: PalettePreviewMode) => void;
+  theme: "light" | "dark";
+  onToggleTheme: () => void;
 };
 
-export const Sidebar = ({ activeMode, onModeChange }: SidebarProps) => (
+export const Sidebar = ({ activeMode, onModeChange, theme, onToggleTheme }: SidebarProps) => (
   <div className="hidden lg:block lg:w-72 lg:flex-shrink-0">
     <aside className="fixed inset-y-0 left-0 z-40 flex h-full w-72 flex-col border-r border-border/60 bg-surface px-6 py-8 shadow-[0_25px_60px_rgba(10,15,35,0.18)]">
       <div className="flex items-center gap-3 text-lg font-semibold tracking-tight text-foreground">
@@ -58,7 +60,23 @@ export const Sidebar = ({ activeMode, onModeChange }: SidebarProps) => (
         })}
       </nav>
 
-      <SidebarAuthPanel />
+      <div className="space-y-4 pt-6">
+        <div className="rounded-2xl border border-border/60 bg-surface/80 px-4 py-3">
+          <button
+            type="button"
+            onClick={onToggleTheme}
+            className={cn(
+              "flex w-full items-center justify-center gap-2 rounded-full border border-border/60 px-4 py-2 text-sm transition",
+              theme === "dark" ? "bg-accent/15 text-foreground" : "bg-background text-foreground"
+            )}
+          >
+            {theme === "dark" ? <MoonStar className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+            {theme === "dark" ? "Dark" : "Light"}
+          </button>
+        </div>
+
+        <SidebarAuthPanel />
+      </div>
     </aside>
   </div>
 );

@@ -10,11 +10,12 @@ if (!supabaseUrl || !supabaseKey) {
   throw new Error("Supabase environment variables are not configured.");
 }
 
-export const createServerSupabaseClient = () =>
-  createServerClient<Database>(supabaseUrl, supabaseKey, {
+export const createServerSupabaseClient = async () => {
+  const cookieStore = await cookies();
+  return createServerClient<Database>(supabaseUrl, supabaseKey, {
     cookies: {
       get(name: string) {
-        return cookies().get(name)?.value;
+        return cookieStore.get(name)?.value;
       },
       set() {
         // Server Components cannot set cookies; handled in route handlers.
@@ -24,3 +25,4 @@ export const createServerSupabaseClient = () =>
       },
     },
   });
+};

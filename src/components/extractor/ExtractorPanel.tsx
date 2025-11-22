@@ -263,6 +263,16 @@ export const ExtractorPanel = ({ onPreview, onSave, canSave }: ExtractorPanelPro
     [swatches]
   );
 
+  const systemPaletteColors = useMemo(() => {
+    if (!suggested) return [];
+    const { tokens } = suggested;
+    return [
+      { label: "Primary", hex: tokens.primary },
+      { label: "Secondary", hex: tokens.secondary },
+      { label: "Accent", hex: tokens.accent },
+    ].filter((item) => typeof item.hex === "string" && item.hex);
+  }, [suggested]);
+
   return (
     <section className="space-y-6">
       <div className="rounded-3xl border border-border/60 bg-surface/80 p-6 shadow-glow">
@@ -410,33 +420,61 @@ export const ExtractorPanel = ({ onPreview, onSave, canSave }: ExtractorPanelPro
           <div className="grid gap-3 md:grid-cols-2">{swatchGrid}</div>
 
           {suggested && (
-            <div className="space-y-3 rounded-2xl border border-border/60 bg-background/40 p-5">
-              <p className="text-xs uppercase tracking-[0.3em] text-foreground/50">System palette</p>
-              <div className="grid gap-3 md:grid-cols-3">
-                {["primary", "secondary", "accent"].map((key) => (
-                  <div key={key} className="flex items-center gap-3 rounded-2xl border border-border/50 bg-surface/70 p-3">
+            <div className="space-y-5 rounded-[32px] border border-border/60 bg-background/50 p-6 shadow-glow">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.3em] text-foreground/50">System palette</p>
+                  <h4 className="text-lg font-semibold text-foreground">
+                    Cohesive roles, ready for your UI.
+                  </h4>
+                </div>
+                <span className="rounded-full border border-border/50 px-3 py-1 text-xs font-medium text-foreground/70">
+                  {systemPaletteColors.length} roles
+                </span>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-3">
+                {systemPaletteColors.map((role) => (
+                  <button
+                    key={role.label}
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(role.hex);
+                      toast.success(`Copied ${role.hex}`);
+                    }}
+                    className="group flex flex-col items-center gap-3 rounded-2xl border border-border/50 bg-surface/80 p-4 text-center transition hover:-translate-y-0.5 hover:border-accent/40"
+                  >
                     <span
-                      className="h-12 w-12 rounded-xl border border-border/40 shadow-inner"
-                      style={{ backgroundColor: suggested.tokens[key as keyof Pick<Tokens, "primary" | "secondary" | "accent">] as string }}
+                      className="h-24 w-full rounded-2xl border border-border/40 shadow-inner"
+                      style={{ backgroundColor: role.hex }}
                     />
-                    <div>
-                      <p className="text-xs uppercase tracking-[0.3em] text-foreground/50">{key}</p>
-                      <p className="text-sm font-semibold text-foreground">
-                        {suggested.tokens[key as "primary" | "secondary" | "accent"]}
-                      </p>
-                    </div>
-                  </div>
+                    <span className="text-sm font-semibold text-foreground">{role.hex}</span>
+                    <span className="text-[11px] uppercase tracking-[0.35em] text-foreground/60">
+                      {role.label}
+                    </span>
+                  </button>
                 ))}
               </div>
-              <div>
+
+              <div className="rounded-2xl border border-border/60 bg-surface/70 p-4">
                 <p className="text-xs uppercase tracking-[0.3em] text-foreground/50">Neutral ramp</p>
-                <div className="mt-2 grid grid-cols-11 gap-1">
+                <div className="mt-3 flex flex-wrap gap-2">
                   {suggested.tokens.neutral.map((neutral) => (
-                    <div
+                    <button
                       key={neutral}
-                      className="h-10 w-full rounded-lg border border-border/40 shadow-inner"
-                      style={{ backgroundColor: neutral }}
-                    />
+                      type="button"
+                      className="flex items-center gap-2 rounded-2xl border border-border/40 bg-background/50 px-3 py-2 text-xs font-semibold text-foreground/70 transition hover:border-accent/40"
+                      onClick={() => {
+                        navigator.clipboard.writeText(neutral);
+                        toast.success(`Copied ${neutral}`);
+                      }}
+                    >
+                      <span
+                        className="h-6 w-6 rounded-full border border-border/40"
+                        style={{ backgroundColor: neutral }}
+                      />
+                      {neutral}
+                    </button>
                   ))}
                 </div>
               </div>
@@ -457,7 +495,7 @@ export const ExtractorPanel = ({ onPreview, onSave, canSave }: ExtractorPanelPro
                     onClick={handleSave}
                     className={cn(
                       "flex items-center gap-2 rounded-full border border-border/60 px-4 py-2 text-sm transition",
-                      canSave && suggested
+                      canSave
                         ? "text-foreground hover:bg-accent/15"
                         : "text-foreground/40"
                     )}

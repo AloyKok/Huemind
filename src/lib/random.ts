@@ -1,75 +1,82 @@
-import { deltaE, oklchToHex, type Oklch } from "@/lib/color-engine/oklch";
+import { deltaE, hexToOklch, oklchToHex, type Oklch } from "@/lib/color-engine/oklch";
 
-const randomBetween = (min: number, max: number) => min + Math.random() * (max - min);
+export type RandomBiasMode = "none" | "warmer" | "cooler" | "muted" | "contrast";
 
-export type Bias = {
-  warmth?: number;
-  contrast?: number;
+type BiasProfile = {
+  hueRange?: [number, number];
+  chromaScale?: number;
   muted?: boolean;
+  highContrast?: boolean;
 };
 
-const generateCandidate = (bias: Bias, index: number, total: number): Oklch => {
-  let h = randomBetween(0, 360);
-  if (bias.warmth && bias.warmth !== 0) {
-    h += bias.warmth * 15;
+const BIAS_PROFILES: Record<RandomBiasMode, BiasProfile> = {
+  none: {},
+  warmer: { hueRange: [10, 80] },
+  cooler: { hueRange: [190, 260] },
+  muted: { chromaScale: 0.8, muted: true },
+  contrast: { highContrast: true },
+};
+
+const clampHue = (value: number) => {
+  let hue = value % 360;
+  if (hue < 0) hue += 360;
+  return hue;
+};
+
+const randomBetween = (min: number, max: number, rng: () => number) => min + rng() * (max - min);
+
+const generateCandidate = (
+  bias: RandomBiasMode,
+  index: number,
+  total: number,
+  rng: () => number
+): Oklch => {
+  const profile = BIAS_PROFILES[bias];
+  const hueRange = profile?.hueRange ?? [0, 360];
+  const h = clampHue(randomBetween(hueRange[0], hueRange[1], rng));
+
+  let l: number;
+  if (profile?.highContrast) {
+    const steps = Math.max(1, total - 1);
+    const t = index / steps;
+    const minL = 0.18;
+    const maxL = 0.82;
+    l = minL + (maxL - minL) * t;
+  } else {
+    l = randomBetween(0.32, 0.75, rng);
   }
-  const contrastBias = bias.contrast ?? 0;
-  let l = 0.25 + Math.random() * 0.5;
-  if (contrastBias) {
-    const t = index / Math.max(1, total - 1);
-    l = 0.15 + t * 0.7;
-    l += contrastBias * (t - 0.5) * 0.2;
-  }
-  let c = 0.08 + Math.random() * 0.22;
-  if (bias.muted) {
-    c *= 0.7;
-  }
+
+  const baseChroma = randomBetween(0.08, 0.28, rng);
+  const chromaScale = profile?.chromaScale ?? 1;
+  const c = baseChroma * chromaScale * (profile?.muted ? 0.65 : 1);
+
   return { l, c, h };
+};
+
+type RandomOptions = {
+  randomFn?: () => number;
 };
 
 export const createRandomHex = (
   existing: string[],
-  bias: Bias,
+  bias: RandomBiasMode,
   index: number,
-  total: number
+  total: number,
+  options?: RandomOptions
 ): { hex: string; oklch: Oklch } => {
+  const rng = options?.randomFn ?? Math.random;
   const existingOklch = existing
-    .map((hex) => {
-      const [l, c, h] = hexToOklchSafe(hex);
-      return { l, c, h } as Oklch;
-    })
-    .filter(Boolean) as Oklch[];
+    .map((hex) => hexToOklch(hex))
+    .filter((color): color is Oklch => Boolean(color));
+
   for (let attempt = 0; attempt < 60; attempt += 1) {
-    const candidate = generateCandidate(bias, index, total);
-    const candidateHex = oklchToHex(candidate);
+    const candidate = generateCandidate(bias, index, total, rng);
     const isDistinct = existingOklch.every((color) => deltaE(color, candidate) > 4.5);
     if (isDistinct) {
-      return { hex: candidateHex, oklch: candidate };
+      return { hex: oklchToHex(candidate), oklch: candidate };
     }
   }
-  return { hex: oklchToHex(generateCandidate(bias, index, total)), oklch: generateCandidate(bias, index, total) };
-};
 
-const hexToOklchSafe = (hex: string): [number, number, number] => {
-  const sanitized = hex.replace("#", "");
-  const value = sanitized.length === 3
-    ? sanitized.split("").map((c) => c + c).join("")
-    : sanitized;
-  const r = parseInt(value.slice(0, 2), 16) / 255;
-  const g = parseInt(value.slice(2, 4), 16) / 255;
-  const b = parseInt(value.slice(4, 6), 16) / 255;
-  const max = Math.max(r, g, b);
-  const min = Math.min(r, g, b);
-  const delta = max - min;
-  let h = 0;
-  if (delta !== 0) {
-    if (max === r) h = ((g - b) / delta) % 6;
-    else if (max === g) h = (b - r) / delta + 2;
-    else h = (r - g) / delta + 4;
-    h *= 60;
-    if (h < 0) h += 360;
-  }
-  const l = (max + min) / 2;
-  const c = delta === 0 ? 0 : delta / (1 - Math.abs(2 * l - 1));
-  return [l, c, h];
+  const fallback = generateCandidate(bias, index, total, rng);
+  return { hex: oklchToHex(fallback), oklch: fallback };
 };
